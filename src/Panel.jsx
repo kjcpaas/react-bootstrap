@@ -16,6 +16,12 @@ var Panel = React.createClass({
     eventKey: React.PropTypes.any
   },
 
+  getInitialState: function(){
+    return {
+      expanded: this.props.expanded != null ? this.props.expanded : false
+    }
+  },
+
   getDefaultProps: function () {
     return {
       bsClass: 'panel',
@@ -23,22 +29,29 @@ var Panel = React.createClass({
     };
   },
 
-  handleSelect: function (e) {
-    if (this.props.onSelect) {
-      this._isChanging = true;
-      this.props.onSelect(this.props.eventKey);
-      this._isChanging = false;
+  handleSelect: function(e){
+    if(this.props.onSelect) {
+      this.props.onSelect(e, this.props.eventKey)
+    } else {
+      this.handleClickEvent(e);
+      this.handleToggle();
     }
-
-    e.preventDefault();
-
-    this.setState({
-      expanded: !this.state.expanded
-    });
   },
 
-  shouldComponentUpdate: function () {
-    return !this._isChanging;
+  handleClickEvent: function(e){
+    e.preventDefault();
+  },
+
+  handleToggle: function(){
+    this.setState({expanded:!this.state.expanded});
+  },
+
+  componentDidUpdate: function(prevProps, prevState){
+    var wasExpanded = prevProps.expanded != null ? prevProps.expanded : prevState.expanded;
+    var isExpanded = this.isExpanded();
+    if(wasExpanded != isExpanded){
+      this.internalToggle();
+    }
   },
 
   getCollapsableDimensionValue: function () {
@@ -51,6 +64,10 @@ var Panel = React.createClass({
     }
 
     return this.refs.panel.getDOMNode();
+  },
+
+  isExpanded: function(){
+    return this.props.expanded != null ? this.props.expanded : this.state.expanded;
   },
 
   render: function () {

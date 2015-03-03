@@ -1,101 +1,121 @@
-var React = require('react');
 var TransitionEvents = require('./utils/TransitionEvents');
 
+/* This mixin keeps track of its own 'internal' expanded state.  This is to
+ * help enable running css animations on the collapsable component.  The
+ * expanded state /cannot/ bet set /before/ the mixin has had a chance to
+ * ensure that dimensions have been set on the collaspable component.  This
+ * is due to how browers interact with css transitions.  If the mixin does 
+ * not share an 'expanded' state then it makes it a lot easier to handle the
+ * order in which the dimension and `expanded` information is set.
+
+ * This pattern requires the owner of this mixin to manually call the
+ * internalToggle() function to toggle the expanded/collapsed state instead
+ * of relying upon props propigation.
+ *
+ * It is suggested that the component which uses this mixin keep its own
+ * expanded state (which could be from props or state) and call the
+ * internalToggle() function in componentDidUpdate().  Ex:
+
+   componentDidUpdate: function(prevProps, prevState){
+     var wasExpanded = prevState.expanded;
+     var isExpanded = this.state.expanded;
+     if(wasExpanded != isExpanded){
+       this.internalToggle();
+     }
+   }
+*/
 var CollapsableMixin = {
-
-  propTypes: {
-    collapsable: React.PropTypes.bool,
-    defaultExpanded: React.PropTypes.bool,
-    expanded: React.PropTypes.bool
-  },
-
-  getInitialState: function () {
+  getInitialState: function(){
     return {
-      expanded: this.props.defaultExpanded != null ? this.props.defaultExpanded : null,
+      internalExpanded: this.props.expanded != null ? this.props.expanded : false,
       collapsing: false
-    };
+    }
   },
 
-  handleTransitionEnd: function () {
-    this._collapseEnd = true;
+  internalToggle: function(){
+    this.state.internalExpanded
+      ? this.handleCollapse()
+      : this.handleExpand();
+  },
+
+  dimension: function(){
+    return (typeof this.getCollapsableDimension === 'function')
+      ? this.getCollapsableDimension()
+      : 'height';
+  },
+
+  handleExpand: function(){
+    var node = this.getCollapsableDOMNode();
+    var dimension = this.dimension();
+
+    // ensure node has dimension value, needed for animation
+    node.style[dimension] = '0px';
+
+    var complete = (function (){
+      TransitionEvents.removeEndEventListener(
+        node,
+        complete
+      );
+      // remove dimension value - this ensures the collapsable item can grow
+      // in dimension after initial display (such as an image loading)
+      node.style[dimension] = '';
+      this.setState({
+        collapsing:false
+      });
+    }).bind(this);
+
+    TransitionEvents.addEndEventListener(
+      node,
+      complete
+    );
+
     this.setState({
-      collapsing: false
+      internalExpanded: true,
+      collapsing: true
     });
   },
 
-  componentWillReceiveProps: function (newProps) {
-    if (this.props.collapsable && newProps.expanded !== this.props.expanded) {
-      this._collapseEnd = false;
-      this.setState({
-        collapsing: true
-      });
-    }
-  },
-
-  _addEndTransitionListener: function () {
+  handleCollapse: function(){
     var node = this.getCollapsableDOMNode();
+    var dimension = this.dimension();
+    var value = this.getCollapsableDimensionValue();
 
-    if (node) {
-      TransitionEvents.addEndEventListener(
-        node,
-        this.handleTransitionEnd
-      );
-    }
-  },
+    // ensure node has dimension value, needed for animation
+    node.style[dimension] = value + 'px';
 
-  _removeEndTransitionListener: function () {
-    var node = this.getCollapsableDOMNode();
-
-    if (node) {
+    var complete = (function (){
       TransitionEvents.removeEndEventListener(
         node,
-        this.handleTransitionEnd
+        complete
       );
-    }
+      this.setState({
+        collapsing: false
+      });
+    }).bind(this);
+
+    TransitionEvents.addEndEventListener(
+      node,
+      complete
+    );
+
+    this.setState({
+      internalExpanded: false,
+      collapsing: true
+    });
   },
 
-  componentDidMount: function () {
-    this._afterRender();
-  },
-
-  componentWillUnmount: function () {
-    this._removeEndTransitionListener();
-  },
-
-  componentWillUpdate: function (nextProps) {
-    var dimension = (typeof this.getCollapsableDimension === 'function') ?
-      this.getCollapsableDimension() : 'height';
+  componentDidUpdate: function(prevProps, prevState){
+    var wasExpanded = prevState.internalExpanded;
     var node = this.getCollapsableDOMNode();
+    var dimension = this.dimension();
+    var value = this.getCollapsableDimensionValue();
 
-    this._removeEndTransitionListener();
-  },
-
-  componentDidUpdate: function (prevProps, prevState) {
-    this._afterRender();
-  },
-
-  _afterRender: function () {
-    if (!this.props.collapsable) {
-      return;
+    // setting the dimension here starts the transition animation
+    if(!wasExpanded && this.state.collapsing) {
+      node.style[dimension] = value + 'px';
+    } else if(wasExpanded && this.state.collapsing) {
+      node.style[dimension] = '0px';
     }
-
-    this._addEndTransitionListener();
-    setTimeout(this._updateDimensionAfterRender, 0);
-  },
-
-  _updateDimensionAfterRender: function () {
-    var node = this.getCollapsableDOMNode();
-    if (node) {
-        var dimension = (typeof this.getCollapsableDimension === 'function') ?
-            this.getCollapsableDimension() : 'height';
-        node.style[dimension] = this.isExpanded() ?
-            this.getCollapsableDimensionValue() + 'px' : '0px';
-    }
-  },
-
-  isExpanded: function () {
-    return (this.props.expanded != null) ?
-      this.props.expanded : this.state.expanded;
   },
 
   getCollapsableClassSet: function (className) {
@@ -111,7 +131,7 @@ var CollapsableMixin = {
 
     classes.collapsing = this.state.collapsing;
     classes.collapse = !this.state.collapsing;
-    classes['in'] = this.isExpanded() && !this.state.collapsing;
+    classes['in'] = this.state.internalExpanded && !this.state.collapsing;
 
     return classes;
   }

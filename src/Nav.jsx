@@ -43,6 +43,14 @@ var Nav = React.createClass({
     return height + parseInt(computedStyles.marginTop, 10) + parseInt(computedStyles.marginBottom, 10);
   },
 
+  componentDidUpdate: function(prevProps, prevState){
+    var wasExpanded = prevProps.expanded != null ? prevProps.expanded : prevState.expanded;
+    var isExpanded = this.props.expanded != null ? this.props.expanded : this.state.expanded;
+    if(wasExpanded != isExpanded){
+      this.internalToggle();
+    }
+  },
+
   render: function () {
     var classes = this.props.collapsable ? this.getCollapsableClassSet() : {};
 
